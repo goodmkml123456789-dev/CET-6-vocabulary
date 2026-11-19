@@ -56,6 +56,13 @@ body {
   display: flex; justify-content: space-between; align-items: baseline;
 }
 .group h3 .count { float: none; margin-left: auto; padding-left: 2mm; font-weight: normal; font-size: 7.8pt; color: #7a8794; }
+.group-toggle {
+  align-self: center; margin-left: 1.5mm; padding: 0.5mm 2mm;
+  border: 0; border-radius: 999px; background: #e3eaf2; color: #35506b;
+  font: 600 7.5pt/1.2 "Microsoft YaHei", "Segoe UI", sans-serif;
+  letter-spacing: 0.2pt; cursor: pointer; white-space: nowrap;
+}
+.group-toggle:hover { background: #d2dde9; }
 .entry { break-inside: avoid; page-break-inside: avoid; padding: 0.55mm 0 0.7mm 0; border-bottom: 0.2pt dotted #e2e2e2; }
 .entry .word { font-family: "Segoe UI Semibold", "Microsoft YaHei", sans-serif; font-weight: 700; color: #14283f; }
 .entry .pos { font-size: 8pt; color: #6b7785; font-style: italic; margin: 0 0.8mm; }
@@ -107,6 +114,7 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   .entry .pos, .entry .gloss { display: inline !important; }
   .entry:hover { background: none; }
   .toggle-all { display: none !important; }
+  .group-toggle { display: none !important; }
   .search-bar { display: none !important; }
   .entry.hit { background: none !important; }
   ::highlight(vocab-hit) { background-color: transparent !important; }
@@ -6910,6 +6918,15 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
     var on = anyOpen();
     btn.textContent = on ? '隐藏全部释义' : '显示全部释义';
     btn.classList.toggle('on', on);
+    /* 组开关文案：组内任意一个展开就显示「隐藏本组」，全关才显示「显示本组」 */
+    for (var g = 0; groupToggles && g < groupToggles.length; g++) {
+      var list = groupToggles[g].entries;
+      var gOn = false;
+      for (var j = 0; j < list.length; j++) {
+        if (list[j].classList.contains('open')) { gOn = true; break; }
+      }
+      groupToggles[g].btn.textContent = gOn ? '隐藏本组' : '显示本组';
+    }
   }
 
   function setAll(open) {
@@ -6959,6 +6976,22 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   var searchIndex = [];
   var openBefore = null;                  /* 搜索开始前的展开状态，null 表示未激活 */
   var scrollBefore = null;                /* 搜索开始前的滚动位置 */
+
+  /* ===== 组内释义开关：只影响本组，语义与总开关一致 ===== */
+  var groupToggles = [];
+  (function buildGroupToggles() {
+    for (var i = 0; i < groupEls.length; i++) {
+      var h = groupEls[i].querySelector('h3');
+      if (!h) continue;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'group-toggle';
+      b.textContent = '显示本组';
+      b.setAttribute('aria-label', '显示或隐藏本组释义');
+      h.appendChild(b);
+      groupToggles.push({ btn: b, entries: groupEls[i].querySelectorAll('.entry') });
+    }
+  })();
 
   (function buildSearchIndex() {
     for (var i = 0; i < entries.length; i++) {
@@ -7103,6 +7136,21 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
     if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
     applySearch();
     searchInput.focus();
+  });
+
+  /* 组开关：组内任意一个展开 → 全部收起；全关 → 全部展开 */
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('.group-toggle') : null;
+    if (!t) return;
+    var g = t.closest('.group');
+    if (!g) return;
+    var list = g.querySelectorAll('.entry');
+    var any = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].classList.contains('open')) { any = true; break; }
+    }
+    for (var j = 0; j < list.length; j++) list[j].classList.toggle('open', !any);
+    sync();
   });
 
   searchInput.addEventListener('keydown', function (e) {
