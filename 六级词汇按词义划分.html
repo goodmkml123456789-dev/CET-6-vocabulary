@@ -62,8 +62,28 @@ body {
 .entry .gloss { color: #222; }
 .star { color: #b8860b; font-size: 8pt; margin-right: 0.6mm; }
 b { color: #8c1d18; font-weight: 700; }
+/* ===== 屏幕端释义折叠：默认只显示单词 ===== */
+.entry { cursor: pointer; }
+.entry:hover { background: #f4f7fb; }
+.entry .pos, .entry .gloss { display: none; }
+.entry.open .pos, .entry.open .gloss { display: inline; }
+.toggle-all {
+  position: fixed; top: 14px; right: 18px; z-index: 99;
+  font: 600 10pt/1 "Microsoft YaHei", "Segoe UI", sans-serif;
+  color: #fff; background: #14283f; border: 0; border-radius: 999px;
+  padding: 9px 18px; cursor: pointer; letter-spacing: 0.5pt;
+  box-shadow: 0 2px 8px rgba(20, 40, 63, .25);
+}
+.toggle-all:hover { background: #1f3a5f; }
+.toggle-all.on { background: #b8860b; box-shadow: 0 2px 8px rgba(184, 134, 11, .32); }
+@media print {
+  .entry .pos, .entry .gloss { display: inline !important; }
+  .entry:hover { background: none; }
+  .toggle-all { display: none !important; }
+}
 </style>
 </head><body>
+<button id="toggle-all" class="toggle-all" type="button">显示全部释义</button>
 <div class="cover">
 <div class="kicker">CET-6 Vocabulary</div>
 <h1>六级词汇 &#183; 按词义分类</h1>
@@ -6725,4 +6745,46 @@ b { color: #8c1d18; font-weight: 700; }
 <div class="entry"><span class="star">&#9733;</span><span class="word">register</span><span class="pos">n.</span><span class="gloss"><b>登记表，注册簿</b>；v. <b>登记，注册；注意到，受到注意；把……挂号邮寄</b></span></div>
 </div>
 </div></section>
+<script>
+(function () {
+  var btn = document.getElementById('toggle-all');
+  var entries = document.querySelectorAll('.entry');
+
+  function allOpen() {
+    if (!entries.length) return false;
+    for (var i = 0; i < entries.length; i++) {
+      if (!entries[i].classList.contains('open')) return false;
+    }
+    return true;
+  }
+
+  function sync() {
+    var on = allOpen();
+    btn.textContent = on ? '隐藏全部释义' : '显示全部释义';
+    btn.classList.toggle('on', on);
+  }
+
+  function setAll(open) {
+    for (var i = 0; i < entries.length; i++) {
+      entries[i].classList.toggle('open', open);
+    }
+    sync();
+  }
+
+  btn.addEventListener('click', function () {
+    setAll(!allOpen());
+  });
+
+  document.addEventListener('click', function (e) {
+    var entry = e.target.closest ? e.target.closest('.entry') : null;
+    if (!entry) return;
+    var sel = window.getSelection && window.getSelection();
+    if (sel && String(sel).length) return;  /* 拖选文字时不误触折叠 */
+    entry.classList.toggle('open');
+    sync();
+  });
+
+  sync();
+})();
+</script>
 </body></html>
