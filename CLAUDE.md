@@ -1,7 +1,7 @@
 # 六级词汇按词义划分
 
-单文件静态学习页：`六级词汇按词义划分.html`（948 KB，6922 行，UTF-8 with BOM）。
-结构：`<style>` 在 5–87 行，12 个 `.domain` / 305 个 `.group` / 5637 个 `.entry`，JS 在 6751 行起。
+单文件静态学习页：`六级词汇按词义划分.html`（957 KB，7130 行，UTF-8 with BOM）。
+结构：`<style>` 在 5–115 行，12 个 `.domain` / 305 个 `.group` / 5637 个 `.entry`，JS 在 6784 行起。
 9 个 PDF 是源材料，已在 `.gitignore` 中排除（`*.pdf`），不入库。
 
 ## 编辑须知
@@ -13,12 +13,16 @@
 
 ## 行为约定（勿"修正"）
 
+- 搜索高亮必须用 CSS Custom Highlight（`::highlight(vocab-hit)`），**不要插入 `<mark>` 或改写 entry 的 innerHTML**：在 5637 条 + `content-visibility` 的文档里这么做会让 Chrome 158 触发渲染 CHECK（STATUS_BREAKPOINT，chrome.dll+0xE53B520），表现为输入搜索词时偶发崩溃。
+- 清空搜索（× / Esc / 删空）必须回到**搜索前的滚动位置**（`scrollBefore` 快照），不能停在文档开头。
 - 点单词：首次只记录 + 预加载音频，**不发音**；再次点才朗读。
 - 关闭释义只能由右上角总开关触发；点已展开的词只重读。
 - 发音主路径：`https://dict.youdao.com/dictvoice?audio=<词>&type=2`（type=2 = 美音），失败回落 speechSynthesis。
 
 ## 验证
 
+- 测试：`bash tests/run-search-test.sh` —— 注入断言脚本，headless Edge 跑 30 条功能断言 + 4 条真实时钟性能断言；改搜索逻辑后必跑。
 - 渲染：`msedge --headless --screenshot` 截图对比，布局不能因性能优化而变。
 - 交互：往 DOM 里注入桩脚本后用 `--dump-dom` 断言类名与调用序列。
+- 用户实际用 Chrome 158（不是 msedge）；渲染/崩溃类问题必须在**有头 Chrome** 复现，headless Edge/Chrome 都不复现。Chrome 崩溃转储在 `%LOCALAPPDATA%\Google\Chrome\User Data\Crashpad\reports`。
 - 音频：headless 无法验证（无用户手势 → `NotAllowedError`），需人工点击确认。

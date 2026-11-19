@@ -78,15 +78,48 @@ b { color: #8c1d18; font-weight: 700; }
 .toggle-all.on { background: #b8860b; box-shadow: 0 2px 8px rgba(184, 134, 11, .32); }
 /* 只渲染可视范围内的领域区块：否则每次切换都要重排 8 万像素高的整页 */
 .domain { content-visibility: auto; contain-intrinsic-size: auto 6000px; }
+/* ===== 搜索框 ===== */
+.search-bar {
+  position: fixed; top: 14px; left: 18px; z-index: 99;
+  display: flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 8px 0 14px;
+  background: #fff; border: 1px solid #c9d3dd; border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(20, 40, 63, .12);
+  font: 10pt/1 "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+.search-bar:focus-within { border-color: #1f3a5f; box-shadow: 0 2px 8px rgba(20, 40, 63, .22); }
+.search-input { width: 210px; border: 0; outline: 0; background: none; color: #14283f; font: inherit; }
+.search-input::placeholder { color: #8a96a3; }
+.search-input::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+.search-count { font-size: 8pt; color: #7a8794; white-space: nowrap; }
+.search-count.empty { color: #8c1d18; }
+.search-clear {
+  width: 22px; height: 22px; border: 0; border-radius: 50%;
+  background: #eef2f7; color: #35506b; font-size: 12pt; line-height: 1;
+  cursor: pointer; padding: 0;
+}
+.search-clear:hover { background: #dfe6ee; }
+.entry.hit { background: #fffbe6; }
+::highlight(vocab-hit) { background-color: #ffe58a; color: inherit; }
+.entry.dim, .group.no-hit, .domain.no-hit { display: none !important; }
+body.searching .cover, body.searching .notes, body.searching .toc { display: none; }
 @media print {
   .entry .pos, .entry .gloss { display: inline !important; }
   .entry:hover { background: none; }
   .toggle-all { display: none !important; }
+  .search-bar { display: none !important; }
+  .entry.hit { background: none !important; }
+  ::highlight(vocab-hit) { background-color: transparent !important; }
   .domain { content-visibility: visible; contain-intrinsic-size: none; }
 }
 </style>
 </head><body>
 <button id="toggle-all" class="toggle-all" type="button">显示全部释义</button>
+<div class="search-bar" role="search">
+<input id="search-input" class="search-input" type="search" placeholder="搜索单词或释义" autocomplete="off" spellcheck="false" aria-label="搜索单词或释义">
+<span id="search-count" class="search-count" aria-live="polite"></span>
+<button id="search-clear" class="search-clear" type="button" aria-label="清空搜索" hidden>&times;</button>
+</div>
 <div class="cover">
 <div class="kicker">CET-6 Vocabulary</div>
 <h1>六级词汇 &#183; 按词义分类</h1>
@@ -6914,6 +6947,181 @@ b { color: #8c1d18; font-weight: 700; }
       seen[word] = true;                  /* 第一次：先不发音，只把音频预下载 */
       preload(word);
     }
+  });
+
+  /* ===== 搜索：就地过滤条目 / 义群 / 领域 ===== */
+  var searchInput = document.getElementById('search-input');
+  var searchCount = document.getElementById('search-count');
+  var searchClear = document.getElementById('search-clear');
+
+  var groupEls = document.querySelectorAll('.group');
+  var domainEls = document.querySelectorAll('.domain');
+  var searchIndex = [];
+  var openBefore = null;                  /* 搜索开始前的展开状态，null 表示未激活 */
+  var scrollBefore = null;                /* 搜索开始前的滚动位置 */
+
+  (function buildSearchIndex() {
+    for (var i = 0; i < entries.length; i++) {
+      var el = entries[i];
+      var w = el.querySelector('.word');
+      var g = el.querySelector('.gloss');
+      var word = w ? w.textContent : '';
+      var gloss = g ? g.textContent : '';
+      searchIndex.push({
+        el: el,
+        word: word,
+        text: (word + ' ' + gloss).toLowerCase(),
+        groupEl: el.closest ? el.closest('.group') : null,
+        domainEl: el.closest ? el.closest('.domain') : null
+      });
+    }
+  })();
+
+  /* CSS Custom Highlight：只建 Range，不改 DOM。
+     直接插入 <mark> 或恢复 innerHTML 会在大文档里触发 Chromium 渲染 CHECK
+     （STATUS_BREAKPOINT，chrome.dll+0xE53B520），所以高亮走 CSS 高亮伪元素。 */
+  var HIGHLIGHT_NAME = 'vocab-hit';
+  var MAX_HIGHLIGHT_RANGES = 4000;
+
+  function clearHighlight() {
+    if (window.CSS && CSS.highlights) CSS.highlights.delete(HIGHLIGHT_NAME);
+  }
+
+  function addHighlights(recs, q) {
+    if (!window.CSS || !CSS.highlights || typeof Highlight !== 'function') return;
+    var ranges = [];
+    for (var i = 0; i < recs.length && ranges.length < MAX_HIGHLIGHT_RANGES; i++) {
+      var parts = recs[i].el.querySelectorAll('.word, .gloss');
+      for (var p = 0; p < parts.length && ranges.length < MAX_HIGHLIGHT_RANGES; p++) {
+        var walker = document.createTreeWalker(parts[p], NodeFilter.SHOW_TEXT, null, false);
+        var n;
+        while ((n = walker.nextNode())) {
+          var text = n.nodeValue || '';
+          var lower = text.toLowerCase();
+          var pos = lower.indexOf(q);
+          while (pos !== -1) {
+            var r = document.createRange();
+            r.setStart(n, pos);
+            r.setEnd(n, pos + q.length);
+            ranges.push(r);
+            if (ranges.length >= MAX_HIGHLIGHT_RANGES) break;
+            pos = lower.indexOf(q, pos + q.length);
+          }
+          if (ranges.length >= MAX_HIGHLIGHT_RANGES) break;
+        }
+      }
+    }
+    if (ranges.length) CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(...ranges));
+  }
+
+  function resetSearch() {
+    clearHighlight();
+    for (var i = 0; i < searchIndex.length; i++) {
+      searchIndex[i].el.classList.remove('dim');
+      searchIndex[i].el.classList.remove('hit');
+    }
+    for (var j = 0; j < groupEls.length; j++) groupEls[j].classList.remove('no-hit');
+    for (var k = 0; k < domainEls.length; k++) domainEls[k].classList.remove('no-hit');
+    document.body.classList.remove('searching');
+    searchCount.textContent = '';
+    searchCount.classList.remove('empty');
+    if (openBefore) {                    /* 还原搜索前的展开状态 */
+      for (var m = 0; m < entries.length; m++) entries[m].classList.toggle('open', openBefore[m]);
+      openBefore = null;
+    }
+    if (scrollBefore !== null) {         /* 回到搜索前的滚动位置，而不是文档开头 */
+      var targetScroll = scrollBefore;
+      scrollBefore = null;
+      requestAnimationFrame(function () { window.scrollTo(0, targetScroll); });
+    }
+    sync();
+  }
+
+  function applySearch() {
+    var q = searchInput.value.trim().toLowerCase();
+    searchClear.hidden = !searchInput.value;
+    if (!q) { resetSearch(); return; }
+
+    clearHighlight();
+    if (openBefore === null) {           /* 首次进入搜索：记录原状，清空时还原 */
+      openBefore = new Array(entries.length);
+      for (var b = 0; b < entries.length; b++) openBefore[b] = entries[b].classList.contains('open');
+      scrollBefore = window.pageYOffset || document.documentElement.scrollTop || 0;
+    }
+
+    for (var i = 0; i < groupEls.length; i++) groupEls[i].classList.add('no-hit');
+    for (var j = 0; j < domainEls.length; j++) domainEls[j].classList.add('no-hit');
+
+    var hits = 0;
+    var hitRecs = [];
+    for (var k = 0; k < searchIndex.length; k++) {
+      var rec = searchIndex[k];
+      var hit = rec.text.indexOf(q) !== -1;
+      rec.el.classList.toggle('dim', !hit);
+      rec.el.classList.toggle('hit', hit);
+      if (hit) {
+        hits++;
+        rec.el.classList.add('open');    /* 命中即展开，省一次点击 */
+        if (rec.groupEl) rec.groupEl.classList.remove('no-hit');
+        if (rec.domainEl) rec.domainEl.classList.remove('no-hit');
+        hitRecs.push(rec);
+      }
+    }
+
+    /* 命中过多时只留底色，逐字高亮会拖慢输入 */
+    if (hitRecs.length <= 1200) addHighlights(hitRecs, q);
+
+    searchCount.textContent = hits ? hits + ' 条' : '无匹配';
+    searchCount.classList.toggle('empty', !hits);
+    document.body.classList.add('searching');
+    sync();
+  }
+
+  var searchTimer = null;
+  function scheduleSearch() {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      searchTimer = null;
+      applySearch();
+    }, 150);
+  }
+
+  searchInput.addEventListener('input', function (e) {
+    searchClear.hidden = !searchInput.value;
+    if (e.isComposing) return;             /* 中文输入法组合中先不抖动 */
+    scheduleSearch();
+  });
+
+  searchInput.addEventListener('compositionend', function () {
+    searchClear.hidden = !searchInput.value;
+    scheduleSearch();
+  });
+
+  searchClear.addEventListener('click', function () {
+    searchInput.value = '';
+    searchClear.hidden = true;
+    if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+    applySearch();
+    searchInput.focus();
+  });
+
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    searchInput.value = '';
+    searchClear.hidden = true;
+    if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+    applySearch();
+    searchInput.blur();
+  });
+
+  /* 按 / 快速聚焦搜索框；正在输入时保持原样 */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    var tag = t && t.tagName ? String(t.tagName).toUpperCase() : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    e.preventDefault();
+    searchInput.focus();
   });
 
   sync();
