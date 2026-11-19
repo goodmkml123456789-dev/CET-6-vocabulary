@@ -76,10 +76,13 @@ b { color: #8c1d18; font-weight: 700; }
 }
 .toggle-all:hover { background: #1f3a5f; }
 .toggle-all.on { background: #b8860b; box-shadow: 0 2px 8px rgba(184, 134, 11, .32); }
+/* 只渲染可视范围内的领域区块：否则每次切换都要重排 8 万像素高的整页 */
+.domain { content-visibility: auto; contain-intrinsic-size: auto 6000px; }
 @media print {
   .entry .pos, .entry .gloss { display: inline !important; }
   .entry:hover { background: none; }
   .toggle-all { display: none !important; }
+  .domain { content-visibility: visible; contain-intrinsic-size: none; }
 }
 </style>
 </head><body>
