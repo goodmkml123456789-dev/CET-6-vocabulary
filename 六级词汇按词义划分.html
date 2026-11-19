@@ -6753,16 +6753,128 @@ b { color: #8c1d18; font-weight: 700; }
   var btn = document.getElementById('toggle-all');
   var entries = document.querySelectorAll('.entry');
 
-  function allOpen() {
-    if (!entries.length) return false;
-    for (var i = 0; i < entries.length; i++) {
-      if (!entries[i].classList.contains('open')) return false;
+  /* ===== 美式发音：用浏览器内置语音合成，无需联网和接口 ===== */
+  var synth = window.speechSynthesis || null;
+  var usVoice = null;
+
+  function pickVoice() {
+    if (!synth || typeof synth.getVoices !== 'function') return;
+    var vs = synth.getVoices() || [];
+    var best = null, fallback = null;
+    for (var i = 0; i < vs.length; i++) {
+      var v = vs[i], lang = String(v.lang || '').toLowerCase().replace('_', '-');
+      if (lang === 'en-us') {
+        if (!fallback) fallback = v;
+        /* 优先挑质量更好的美式女声/男声 */
+        if (/natural|aria|jenny|guy|google us/i.test(v.name || '')) { best = v; break; }
+      }
     }
-    return true;
+    usVoice = best || fallback;
+  }
+
+  function makeUtterance(text) {
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    u.rate = 0.95;                        /* 略慢于默认，便于跟读 */
+    if (usVoice) u.voice = usVoice;
+    return u;
+  }
+
+  /* 预热：首次调用语音引擎会有几百毫秒初始化，且第一句开头常被吞。
+     先空跑一条静音语句把引擎唤醒，之后用户点词就能立即出声。 */
+  var warmed = false;
+  function warmUp() {
+    if (!synth || warmed || typeof window.SpeechSynthesisUtterance !== 'function') return;
+    warmed = true;
+    var u = makeUtterance(' ');
+    u.volume = 0;
+    u.onend = u.onerror = null;
+    synth.speak(u);
+  }
+
+  var pendingTimer = null;
+
+  /* 语音合成只作兜底：真音频拿不到时才用它 */
+  function speakSynth(text) {
+    if (!synth || !text || typeof window.SpeechSynthesisUtterance !== 'function') return;
+    /* 前导空格：Chrome/Edge 的已知缺陷，直接播会吞掉第一个音节 */
+    var say = function () {
+      synth.speak(makeUtterance(' ' + text));
+    };
+    if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+    if (synth.speaking || synth.pending) {
+      /* cancel() 是异步的，紧接着 speak 会把新音频的开头一起掐掉，
+         所以先停、等它真正落地再播。idle 时不要 cancel，否则每次都吞字。 */
+      synth.cancel();
+      pendingTimer = setTimeout(function () {
+        pendingTimer = null;
+        say();
+      }, 120);
+    } else {
+      say();
+    }
+  }
+
+  if (synth) {
+    pickVoice();
+    if (typeof synth.addEventListener === 'function') synth.addEventListener('voiceschanged', pickVoice);
+    else synth.onvoiceschanged = pickVoice;
+    warmUp();
+    setTimeout(warmUp, 800);              /* 语音列表异步加载，兜底再预热一次 */
+  }
+
+  /* ===== 发音主路径：有道真人美音 mp3（type=2 为美音） =====
+     第一次点开只预下载、不播放；第二次起直接播完整音频，
+     因为数据已经在内存里，不会有语音合成那种开头被吞的问题。 */
+  var AUDIO_BASE = 'https://dict.youdao.com/dictvoice?audio=';
+  var audioCache = Object.create(null);
+  var currentEl = null;
+
+  function audioOf(word) {
+    var rec = audioCache[word];
+    if (rec) return rec;
+    rec = { el: null, failed: false };
+    audioCache[word] = rec;
+    try {
+      var el = new Audio(AUDIO_BASE + encodeURIComponent(word) + '&type=2');
+      el.preload = 'auto';
+      el.addEventListener('error', function () { rec.failed = true; });
+      rec.el = el;
+      el.load();
+    } catch (e) {
+      rec.failed = true;
+    }
+    return rec;
+  }
+
+  function preload(word) {                /* 第一次点击：只下载，不出声 */
+    if (word) audioOf(word);
+  }
+
+  function speak(word) {                  /* 第二次点击起：直接播放 */
+    if (!word) return;
+    var rec = audioOf(word);
+    if (!rec.el || rec.failed) { speakSynth(word); return; }
+    if (currentEl && currentEl !== rec.el) {
+      try { currentEl.pause(); } catch (e) {}
+    }
+    currentEl = rec.el;
+    try { rec.el.currentTime = 0; } catch (e) {}
+    var p = rec.el.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(function () { speakSynth(word); });   /* 播不出来就退回语音合成 */
+    }
+  }
+
+  function anyOpen() {
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].classList.contains('open')) return true;
+    }
+    return false;
   }
 
   function sync() {
-    var on = allOpen();
+    var on = anyOpen();
     btn.textContent = on ? '隐藏全部释义' : '显示全部释义';
     btn.classList.toggle('on', on);
   }
@@ -6775,16 +6887,33 @@ b { color: #8c1d18; font-weight: 700; }
   }
 
   btn.addEventListener('click', function () {
-    setAll(!allOpen());
+    setAll(!anyOpen());                   /* 有任意一条展开 → 全部收起；否则全部展开 */
   });
+
+  var seen = Object.create(null);         /* 记录点过的单词：首次点开只记录，不发音 */
 
   document.addEventListener('click', function (e) {
     var entry = e.target.closest ? e.target.closest('.entry') : null;
     if (!entry) return;
     var sel = window.getSelection && window.getSelection();
-    if (sel && String(sel).length) return;  /* 拖选文字时不误触折叠 */
-    entry.classList.toggle('open');
+    if (sel && String(sel).length) return;  /* 拖选文字时不误触 */
+    var w = entry.querySelector('.word');
+    var word = w ? w.textContent : '';
+
+    if (entry.classList.contains('open')) { /* 已展开：再点只读一遍，不收释义 */
+      if (word) speak(word);
+      return;
+    }
+
+    entry.classList.add('open');
     sync();
+    if (!word) return;
+    if (seen[word]) {
+      speak(word);                        /* 第二次及以后：展开并读出 */
+    } else {
+      seen[word] = true;                  /* 第一次：先不发音，只把音频预下载 */
+      preload(word);
+    }
   });
 
   sync();
