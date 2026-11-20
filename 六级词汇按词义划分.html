@@ -110,6 +110,20 @@ b { color: #8c1d18; font-weight: 700; }
 ::highlight(vocab-hit) { background-color: #ffe58a; color: inherit; }
 .entry.dim, .group.no-hit, .domain.no-hit { display: none !important; }
 body.searching .cover, body.searching .notes, body.searching .toc { display: none; }
+/* 触摸设备：长按单词用于搜索，关闭原生选字与系统菜单；桌面仍可选中复制 */
+@media (hover: none) and (pointer: coarse) {
+  .entry .word {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+/* 接键盘/触控板的 Pad 可能报告 pointer: fine，用 JS 标记兜底 */
+.touch-device .entry .word {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 @media print {
   .entry .pos, .entry .gloss { display: inline !important; }
   .entry:hover { background: none; }
@@ -7166,6 +7180,10 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   var longPressGuard = false;
   var longPressGuardTimer = null;
 
+  if (navigator.maxTouchPoints > 0) {
+    document.documentElement.classList.add('touch-device');
+  }
+
   function cancelLongPress() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
     longPressStart = null;
@@ -7209,6 +7227,14 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   document.addEventListener('pointercancel', cancelLongPress);
   window.addEventListener('scroll', cancelLongPress, true);
   window.addEventListener('wheel', cancelLongPress, { passive: true });
+
+  /* 触摸长按容易被浏览器当作选字菜单：按住单词期间拦截 contextmenu */
+  document.addEventListener('contextmenu', function (e) {
+    if (!e.target.closest || !e.target.closest('.word')) return;
+    var touchLike = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+                    navigator.maxTouchPoints > 0;
+    if (longPressStart || longPressGuard || touchLike) e.preventDefault();
+  });
 
   searchInput.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
