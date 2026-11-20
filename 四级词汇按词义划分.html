@@ -103,6 +103,20 @@ b { color: #8c1d18; font-weight: 700; }
 ::highlight(vocab-hit) { background-color: #ffe58a; color: inherit; }
 .entry.dim, .group.no-hit, .domain.no-hit { display: none !important; }
 body.searching .cover, body.searching .notes, body.searching .toc { display: none; }
+/* 触摸设备：长按单词用于搜索，关闭原生选字与系统菜单；桌面仍可选中复制 */
+@media (hover: none) and (pointer: coarse) {
+  .entry .word {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+/* 接键盘/触控板的 Pad 可能报告 pointer: fine，用 JS 标记兜底 */
+.touch-device .entry .word {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 @media print {
   .entry .pos, .entry .gloss { display: inline !important; }
   .entry:hover { background: none; }
@@ -3709,6 +3723,11 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   var seen = Object.create(null);         /* 记录点过的单词：首次点开只记录，不发音 */
 
   document.addEventListener('click', function (e) {
+    if (longPressGuard) {                /* 长按搜索后，同一次手势的 click 不再展开/朗读 */
+      longPressGuard = false;
+      if (longPressGuardTimer) { clearTimeout(longPressGuardTimer); longPressGuardTimer = null; }
+      return;
+    }
     var entry = e.target.closest ? e.target.closest('.entry') : null;
     if (!entry) return;
     var sel = window.getSelection && window.getSelection();
@@ -3917,6 +3936,70 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
     }
     for (var j = 0; j < list.length; j++) list[j].classList.toggle('open', !any);
     sync();
+  });
+
+  /* ===== 长按单词直接搜索：按住 700ms 触发，防误触 ===== */
+  var LONG_PRESS_MS = 700;
+  var LONG_PRESS_MOVE = 10;
+  var longPressTimer = null;
+  var longPressStart = null;
+  var longPressGuard = false;
+  var longPressGuardTimer = null;
+
+  if (navigator.maxTouchPoints > 0) {
+    document.documentElement.classList.add('touch-device');
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    longPressStart = null;
+  }
+
+  document.addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    var w = e.target.closest ? e.target.closest('.word') : null;
+    if (!w) return;
+    cancelLongPress();
+    longPressStart = { x: e.clientX, y: e.clientY, word: w.textContent, pointerId: e.pointerId };
+    longPressTimer = setTimeout(function () {
+      longPressTimer = null;
+      var start = longPressStart;
+      longPressStart = null;
+      if (!start) return;
+      var sel = window.getSelection && window.getSelection();
+      if (sel && String(sel).length) return;   /* 正在选字，不触发 */
+      if (sel) sel.removeAllRanges();
+      longPressGuard = true;
+      if (longPressGuardTimer) clearTimeout(longPressGuardTimer);
+      longPressGuardTimer = setTimeout(function () {
+        longPressGuard = false;
+        longPressGuardTimer = null;
+      }, 1500);
+      searchInput.value = start.word;
+      searchClear.hidden = false;
+      applySearch();
+      searchInput.focus();
+    }, LONG_PRESS_MS);
+  });
+
+  document.addEventListener('pointermove', function (e) {
+    if (!longPressStart || e.pointerId !== longPressStart.pointerId) return;
+    var dx = e.clientX - longPressStart.x;
+    var dy = e.clientY - longPressStart.y;
+    if (dx * dx + dy * dy > LONG_PRESS_MOVE * LONG_PRESS_MOVE) cancelLongPress();
+  });
+
+  document.addEventListener('pointerup', cancelLongPress);
+  document.addEventListener('pointercancel', cancelLongPress);
+  window.addEventListener('scroll', cancelLongPress, true);
+  window.addEventListener('wheel', cancelLongPress, { passive: true });
+
+  /* 触摸长按容易被浏览器当作选字菜单：按住单词期间拦截 contextmenu */
+  document.addEventListener('contextmenu', function (e) {
+    if (!e.target.closest || !e.target.closest('.word')) return;
+    var touchLike = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+                    navigator.maxTouchPoints > 0;
+    if (longPressStart || longPressGuard || touchLike) e.preventDefault();
   });
 
   searchInput.addEventListener('keydown', function (e) {
