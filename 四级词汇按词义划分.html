@@ -126,13 +126,64 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   .entry.hit { background: none !important; }
   ::highlight(vocab-hit) { background-color: transparent !important; }
   .domain { content-visibility: visible; contain-intrinsic-size: none; }
+  .hard-mark { display: none !important; }
+  .entry.hard { box-shadow: none !important; }
+  .hard-review { display: none !important; }
 }
+/* ===== 难词标记 ===== */
+.search-bar .hard-open {
+  border: 0; border-radius: 999px; padding: 5px 10px;
+  background: #e3eaf2; color: #35506b; white-space: nowrap;
+  font: 600 8.5pt/1 "Microsoft YaHei", "Segoe UI", sans-serif; cursor: pointer;
+}
+.search-bar .hard-open.has { background: #b8860b; color: #fff; }
+.search-bar .hard-open:disabled { opacity: .45; cursor: default; }
+.hard-mark {
+  float: right;
+  width: 16px; height: 16px; margin: 0.2mm 0 0 4px; padding: 0; border-radius: 50%;
+  border: 0.6pt solid #c9d3dd; background: #fff; color: #8a96a3;
+  font: 600 7pt/1 "Microsoft YaHei", "Segoe UI", sans-serif;
+  cursor: pointer; opacity: .4;
+}
+.entry:hover .hard-mark, .entry.open .hard-mark, .hard-mark:focus-visible { opacity: 1; }
+.hard-mark[aria-pressed="true"] { background: #b8860b; border-color: #b8860b; color: #fff; opacity: 1; }
+.entry.hard { box-shadow: inset 2pt 0 0 #d4a017; }
+/* ===== 难词复习层 ===== */
+.hard-review {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  align-items: center; justify-content: center; padding: 16px;
+  background: rgba(12, 22, 36, .55);
+  font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+.hard-review.open { display: flex; }
+.hard-review [hidden] { display: none !important; }
+.hard-review-panel {
+  position: relative; width: min(420px, 92vw); max-height: 86vh; overflow: auto;
+  background: #fff; border-radius: 14px; padding: 24px 22px 18px;
+  box-shadow: 0 18px 50px rgba(12, 22, 36, .35);
+}
+.hard-review-word { font-size: 26pt; font-weight: 700; color: #14283f; text-align: center; margin: 6px 0 10px; word-break: break-all; }
+.hard-review-close { position: absolute; top: 8px; right: 10px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #eef2f7; color: #35506b; font-size: 15pt; cursor: pointer; }
+.hard-review-play { display: block; margin: 0 auto 10px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #eef2f7; font-size: 13pt; cursor: pointer; }
+.hard-review-gloss { border-top: 0.5pt solid #e2e2e2; margin: 4px 0 14px; padding-top: 8px; font-size: 10.5pt; line-height: 1.6; color: #222; }
+.hard-review-gloss ul { margin: 0; padding: 0; list-style: none; }
+.hard-review-gloss li { margin: 0 0 6px; }
+.hard-review-gloss .rg-pos { color: #6b7785; font-style: italic; margin-right: 4px; }
+.hard-review-gloss .rg-group { color: #8a96a3; font-size: 8.5pt; margin-left: 6px; }
+.hard-review-btn { display: block; width: 100%; border: 0; border-radius: 10px; padding: 11px 12px; margin-top: 8px; font: 600 10.5pt/1 "Microsoft YaHei", "Segoe UI", sans-serif; cursor: pointer; background: #eef2f7; color: #1f3a5f; }
+.hard-review-actions { display: flex; gap: 8px; }
+.hard-review-actions .hard-review-btn { flex: 1; }
+.hard-review-btn.again { background: #f6e7e5; color: #8c1d18; }
+.hard-review-btn.known { background: #14283f; color: #fff; }
+.hard-review-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 9pt; color: #7a8794; }
+.hard-review-link { border: 0; background: none; color: #8c1d18; font-size: 9pt; cursor: pointer; text-decoration: underline; }
 </style>
 </head><body>
 <button id="toggle-all" class="toggle-all" type="button">显示全部释义</button>
 <div class="search-bar" role="search">
 <input id="search-input" class="search-input" type="search" placeholder="搜索单词或释义" autocomplete="off" spellcheck="false" aria-label="搜索单词或释义">
 <span id="search-count" class="search-count" aria-live="polite"></span>
+<button id="hard-open" class="hard-open" type="button" aria-haspopup="dialog" aria-label="打开难词复习" disabled>难词 0</button>
 <button id="search-clear" class="search-clear" type="button" aria-label="清空搜索" hidden>&times;</button>
 </div>
 <div class="cover">
@@ -3569,6 +3620,23 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
 <div class="entry"><span class="word">whereas</span><span class="pos">conj.</span><span class="gloss"><b>但是，然而</b>；鉴于</span></div>
 </div>
 </div></section>
+<div id="hard-review" class="hard-review" role="dialog" aria-modal="true" aria-labelledby="hard-review-word">
+  <div class="hard-review-panel">
+    <button id="hard-close" class="hard-review-close" type="button" aria-label="关闭复习">&times;</button>
+    <div id="hard-review-word" class="hard-review-word"></div>
+    <button id="hard-play" class="hard-review-play" type="button" aria-label="朗读">&#128266;</button>
+    <div id="hard-review-gloss" class="hard-review-gloss" hidden></div>
+    <button id="hard-reveal" class="hard-review-btn" type="button">显示释义</button>
+    <div class="hard-review-actions">
+      <button id="hard-again" class="hard-review-btn again" type="button">还不会</button>
+      <button id="hard-known" class="hard-review-btn known" type="button">记住了</button>
+    </div>
+    <div class="hard-review-foot">
+      <span id="hard-progress" class="hard-review-progress"></span>
+      <button id="hard-unmark" class="hard-review-link" type="button">移出难词本</button>
+    </div>
+  </div>
+</div>
 <script>
 (function () {
   var btn = document.getElementById('toggle-all');
@@ -3723,6 +3791,13 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   var seen = Object.create(null);         /* 记录点过的单词：首次点开只记录，不发音 */
 
   document.addEventListener('click', function (e) {
+    var markBtn = e.target.closest ? e.target.closest('.hard-mark') : null;
+    if (markBtn) {                       /* 难词标记：只切换标记，不展开、不朗读 */
+      var mEntry = markBtn.closest('.entry');
+      var mw = mEntry ? mEntry.querySelector('.word') : null;
+      if (mw) toggleHard(mw.textContent);
+      return;
+    }
     if (longPressGuard) {                /* 长按搜索后，同一次手势的 click 不再展开/朗读 */
       longPressGuard = false;
       if (longPressGuardTimer) { clearTimeout(longPressGuardTimer); longPressGuardTimer = null; }
@@ -3778,6 +3853,40 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
     }
   })();
 
+  /* ===== 难词本：数据层（localStorage 不可用时退回内存） ===== */
+  var HARD_KEY = 'cet4:hard';
+  var hardStore = (function () {
+    var mem = Object.create(null);
+    try {
+      var raw = window.localStorage.getItem(HARD_KEY);
+      if (raw) { var obj = JSON.parse(raw); if (obj && typeof obj === 'object') mem = obj; }
+    } catch (e) {}
+    function save() { try { window.localStorage.setItem(HARD_KEY, JSON.stringify(mem)); } catch (e) {} }
+    return {
+      has: function (w) { return Object.prototype.hasOwnProperty.call(mem, w); },
+      get: function (w) { return mem[w] || null; },
+      mark: function (w) { if (!mem[w]) mem[w] = { box: 0, seen: 0, added: Date.now() }; save(); },
+      unmark: function (w) { delete mem[w]; save(); },
+      bump: function (w, known) {
+        var r = mem[w]; if (!r) return;
+        r.seen = (r.seen || 0) + 1;
+        r.box = known ? Math.min(2, (r.box || 0) + 1) : 0;
+        save();
+      },
+      words: function () { return Object.keys(mem); },
+      count: function () { return Object.keys(mem).length; },
+      pruneUnknown: function (isKnown) {
+        var ws = Object.keys(mem), dirty = false;
+        for (var i = 0; i < ws.length; i++) {
+          if (!isKnown(ws[i])) { delete mem[ws[i]]; dirty = true; }
+        }
+        if (dirty) save();
+      }
+    };
+  })();
+  var wordEls = Object.create(null);
+  var wordInfo = Object.create(null);
+
   (function buildSearchIndex() {
     for (var i = 0; i < entries.length; i++) {
       var el = entries[i];
@@ -3785,15 +3894,66 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
       var g = el.querySelector('.gloss');
       var word = w ? w.textContent : '';
       var gloss = g ? g.textContent : '';
-      searchIndex.push({
+      var rec = {
         el: el,
         word: word,
         text: (word + ' ' + gloss).toLowerCase(),
         groupEl: el.closest ? el.closest('.group') : null,
         domainEl: el.closest ? el.closest('.domain') : null
+      };
+      searchIndex.push(rec);
+      (wordEls[word] || (wordEls[word] = [])).push(el);
+      var gh = rec.groupEl ? rec.groupEl.querySelector('h3') : null;
+      var gname = gh && gh.firstChild ? String(gh.firstChild.nodeValue).trim() : '';
+      (wordInfo[word] || (wordInfo[word] = [])).push({
+        pos: el.querySelector('.pos') ? el.querySelector('.pos').textContent : '',
+        gloss: el.querySelector('.gloss') ? el.querySelector('.gloss').textContent : '',
+        group: gname
       });
     }
   })();
+
+  /* ===== 难词本：标记按钮与状态 ===== */
+  var hardOpen = document.getElementById('hard-open');
+
+  for (var mi = 0; mi < entries.length; mi++) {
+    var mbtn = document.createElement('button');
+    mbtn.type = 'button';
+    mbtn.className = 'hard-mark';
+    mbtn.textContent = '难';
+    mbtn.setAttribute('aria-pressed', 'false');
+    mbtn.setAttribute('aria-label', '标记为难词');
+    entries[mi].insertBefore(mbtn, entries[mi].firstChild);
+  }
+
+  hardStore.pruneUnknown(function (w) { return !!wordEls[w]; });
+
+  function syncHardMarks(word) {
+    var els = wordEls[word] || [], on = hardStore.has(word);
+    for (var i = 0; i < els.length; i++) {
+      els[i].classList.toggle('hard', on);
+      var mk = els[i].querySelector('.hard-mark');
+      if (mk) mk.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    updateHardButton();
+  }
+
+  function updateHardButton() {
+    var n = hardStore.count();
+    hardOpen.textContent = '难词 ' + n;
+    hardOpen.classList.toggle('has', n > 0);
+    hardOpen.disabled = n === 0;
+    if (reviewOpen && n === 0) closeReview();
+  }
+
+  function toggleHard(word) {
+    if (hardStore.has(word)) hardStore.unmark(word); else hardStore.mark(word);
+    syncHardMarks(word);
+  }
+
+  var hardWords = hardStore.words();
+  for (var hi = 0; hi < hardWords.length; hi++) syncHardMarks(hardWords[hi]);
+  updateHardButton();
 
   /* CSS Custom Highlight：只建 Range，不改 DOM。
      直接插入 <mark> 或恢复 innerHTML 会在大文档里触发 Chromium 渲染 CHECK
@@ -4019,6 +4179,131 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
     e.preventDefault();
     searchInput.focus();
+  });
+
+  /* ===== 难词复习层 ===== */
+  var reviewEl = document.getElementById('hard-review');
+  var reviewWordEl = document.getElementById('hard-review-word');
+  var reviewGlossEl = document.getElementById('hard-review-gloss');
+  var reviewProgressEl = document.getElementById('hard-progress');
+  var reviewRevealBtn = document.getElementById('hard-reveal');
+  var reviewOrder = [], reviewPos = 0, reviewOpen = false, lastFocus = null;
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1)), t = arr[i];
+      arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  function openReview() {
+    var ws = hardStore.words().filter(function (w) { return !!wordEls[w]; });
+    if (!ws.length) return;
+    shuffle(ws);
+    ws.sort(function (a, b) { return hardStore.get(a).box - hardStore.get(b).box; });
+    reviewOrder = ws;
+    reviewPos = 0;
+    reviewOpen = true;
+    lastFocus = document.activeElement;
+    reviewEl.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderReview();
+    document.getElementById('hard-close').focus();
+  }
+
+  function closeReview() {
+    if (!reviewOpen) return;
+    reviewOpen = false;
+    reviewEl.classList.remove('open');
+    document.body.style.overflow = '';
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+
+  function renderReview() {
+    if (!reviewOpen) return;
+    if (reviewPos >= reviewOrder.length) { showComplete(); return; }
+    var w = reviewOrder[reviewPos];
+    var rec = wordInfo[w] || [];
+    reviewWordEl.textContent = w;
+    reviewGlossEl.hidden = true;
+    reviewGlossEl.textContent = '';
+    var ul = document.createElement('ul');
+    for (var i = 0; i < rec.length; i++) {
+      var li = document.createElement('li');
+      var p = document.createElement('span');
+      p.className = 'rg-pos';
+      p.textContent = rec[i].pos;
+      var gl = document.createElement('span');
+      gl.className = 'rg-gloss';
+      gl.textContent = rec[i].gloss;
+      var grp = document.createElement('span');
+      grp.className = 'rg-group';
+      grp.textContent = rec[i].group;
+      li.appendChild(p);
+      li.appendChild(gl);
+      li.appendChild(grp);
+      ul.appendChild(li);
+    }
+    reviewGlossEl.appendChild(ul);
+    reviewRevealBtn.hidden = false;
+    reviewRevealBtn.textContent = '显示释义';
+    document.getElementById('hard-play').hidden = false;
+    document.getElementById('hard-unmark').hidden = false;
+    document.getElementById('hard-again').hidden = false;
+    document.getElementById('hard-known').hidden = false;
+    reviewProgressEl.textContent = (reviewPos + 1) + '/' + reviewOrder.length;
+  }
+
+  function revealGloss() {
+    reviewGlossEl.hidden = false;
+    reviewRevealBtn.hidden = true;
+  }
+
+  function answerCurrent(known) {
+    if (!reviewOpen) return;
+    var w = reviewOrder[reviewPos];
+    if (!w) return;
+    hardStore.bump(w, known);
+    reviewPos++;
+    renderReview();
+  }
+
+  function unmarkCurrent() {
+    if (!reviewOpen) return;
+    var w = reviewOrder[reviewPos];
+    if (!w) return;
+    hardStore.unmark(w);
+    syncHardMarks(w);
+    reviewPos++;
+    if (hardStore.count() === 0) { closeReview(); return; }
+    renderReview();
+  }
+
+  function showComplete() {
+    reviewWordEl.textContent = '本次复习完成';
+    reviewGlossEl.hidden = true;
+    reviewGlossEl.textContent = '';
+    reviewRevealBtn.hidden = true;
+    document.getElementById('hard-play').hidden = true;
+    document.getElementById('hard-unmark').hidden = true;
+    document.getElementById('hard-again').hidden = true;
+    document.getElementById('hard-known').hidden = true;
+    reviewProgressEl.textContent = '';
+    document.getElementById('hard-close').focus();
+  }
+
+  document.getElementById('hard-open').addEventListener('click', openReview);
+  document.getElementById('hard-close').addEventListener('click', closeReview);
+  reviewRevealBtn.addEventListener('click', revealGloss);
+  document.getElementById('hard-play').addEventListener('click', function () {
+    if (reviewOpen && reviewOrder[reviewPos]) speak(reviewOrder[reviewPos]);
+  });
+  document.getElementById('hard-again').addEventListener('click', function () { answerCurrent(false); });
+  document.getElementById('hard-known').addEventListener('click', function () { answerCurrent(true); });
+  document.getElementById('hard-unmark').addEventListener('click', unmarkCurrent);
+  document.addEventListener('keydown', function (e) {
+    if (reviewOpen && e.key === 'Escape') closeReview();
   });
 
   sync();
