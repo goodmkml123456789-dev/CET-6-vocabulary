@@ -1,6 +1,6 @@
 # 六级词汇按词义划分
 
-单文件静态学习页：`六级词汇按词义划分.html`（959 KB，7178 行，UTF-8 with BOM）。
+单文件静态学习页：`六级词汇按词义划分.html`（961 KB，7235 行，UTF-8 with BOM）。
 结构：`<style>` 在 5–123 行，12 个 `.domain` / 305 个 `.group` / 5637 个 `.entry`，JS 在 6792 行起。
 9 个 PDF 是源材料，已在 `.gitignore` 中排除（`*.pdf`），不入库。
 
@@ -16,6 +16,7 @@
 - 搜索高亮必须用 CSS Custom Highlight（`::highlight(vocab-hit)`），**不要插入 `<mark>` 或改写 entry 的 innerHTML**：在 5637 条 + `content-visibility` 的文档里这么做会让 Chrome 158 触发渲染 CHECK（STATUS_BREAKPOINT，chrome.dll+0xE53B520），表现为输入搜索词时偶发崩溃。
 - 清空搜索（× / Esc / 删空）必须回到**搜索前的滚动位置**（`scrollBefore` 快照），不能停在文档开头。
 - 组开关：组内任意一个展开就显示「隐藏本组」，点击全部收起；全关时显示「显示本组」，点击全部展开；只影响本组，文案随状态自动刷新。
+- 长按单词 700ms 直接搜索该词（只认 `.word` 文本）；移动超过 10px、滚动、选字会取消；长按后同一次手势的 click 不再展开/朗读。
 - 点单词：首次只记录 + 预加载音频，**不发音**；再次点才朗读。
 - 关闭释义只能由右上角总开关或本组开关触发；点已展开的词只重读。
 - 发音主路径：`https://dict.youdao.com/dictvoice?audio=<词>&type=2`（type=2 = 美音），失败回落 speechSynthesis。
