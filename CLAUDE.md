@@ -1,8 +1,8 @@
 # 六级词汇按词义划分
 
-单文件静态学习页：`六级词汇按词义划分.html`（975 KB，7546 行，UTF-8 with BOM）。
-结构：`<style>` 在 5–187 行，12 个 `.domain` / 305 个 `.group` / 5637 个 `.entry`，JS 在 6874 行起。
-9 个 PDF 是源材料，已在 `.gitignore` 中排除（`*.pdf`），不入库。
+单文件静态学习页：`六级词汇按词义划分.html`（979 KB，7657 行，UTF-8 with BOM）。
+结构：`<style>` 在 5–202 行，12 个 `.domain` / 305 个 `.group` / 5637 个 `.entry`，JS 在 6893 行起。
+源材料 PDF 在 `reference-PDF/`，已在 `.gitignore` 中排除，不入库。
 
 ## 文件约定
 

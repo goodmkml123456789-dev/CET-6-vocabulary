@@ -184,6 +184,21 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
 .hard-review-btn.known { background: #14283f; color: #fff; }
 .hard-review-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 9pt; color: #7a8794; }
 .hard-review-link { border: 0; background: none; color: #8c1d18; font-size: 9pt; cursor: pointer; text-decoration: underline; }
+/* ===== 继续上次 ===== */
+.resume {
+  position: fixed; right: 18px; bottom: 18px; z-index: 98;
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: 62vw; padding: 9px 14px 9px 12px;
+  border: 0; border-left: 3px solid #b8860b; border-radius: 999px;
+  background: #fff; color: #14283f; cursor: pointer;
+  font: 600 9.5pt/1.2 "Microsoft YaHei", "Segoe UI", sans-serif;
+  box-shadow: 0 3px 12px rgba(20, 40, 63, .22);
+}
+.resume:hover { background: #f4f7fb; }
+.resume[hidden] { display: none !important; }
+.resume .resume-arrow { color: #b8860b; font-size: 11pt; line-height: 1; }
+.resume .resume-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.searching .resume { display: none !important; }
 </style>
 </head><body>
 <button id="toggle-all" class="toggle-all" type="button">显示全部释义</button>
@@ -6871,6 +6886,10 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
     </div>
   </div>
 </div>
+<button id="resume" class="resume" type="button" aria-label="回到上次阅读的位置" hidden>
+  <span class="resume-arrow" aria-hidden="true">&#8613;</span>
+  <span id="resume-label" class="resume-label">继续上次</span>
+</button>
 <script>
 (function () {
   var btn = document.getElementById('toggle-all');
@@ -7538,6 +7557,98 @@ body.searching .cover, body.searching .notes, body.searching .toc { display: non
   document.getElementById('hard-unmark').addEventListener('click', unmarkCurrent);
   document.addEventListener('keydown', function (e) {
     if (reviewOpen && e.key === 'Escape') closeReview();
+  });
+
+  /* ===== 继续上次：记录与恢复阅读位置 ===== */
+  var LAST_KEY = 'cet6:last';
+  var resumeBtn = document.getElementById('resume');
+  var resumeLabel = document.getElementById('resume-label');
+  var resumeSaved = null;
+
+  function readLast() {
+    try {
+      var raw = window.localStorage.getItem(LAST_KEY);
+      if (!raw) return null;
+      var o = JSON.parse(raw);
+      return o && typeof o === 'object' ? o : null;
+    } catch (e) { return null; }
+  }
+
+  function entryAtTop() {
+    var bodyRect = document.body.getBoundingClientRect();
+    var xs = [], ratios = [0.25, 0.5, 0.75];
+    for (var xi = 0; xi < ratios.length; xi++) {
+      var x = bodyRect.left + bodyRect.width * ratios[xi];
+      if (x > 2 && x < window.innerWidth - 2) xs.push(x);
+    }
+    if (!xs.length) xs.push(window.innerWidth / 2);
+    var ys = [70, 110, 160];
+    for (var yi = 0; yi < ys.length; yi++) {
+      for (var xj = 0; xj < xs.length; xj++) {
+        var stack = document.elementsFromPoint ? document.elementsFromPoint(xs[xj], ys[yi]) : [];
+        for (var si = 0; si < stack.length; si++) {
+          var en = stack[si].closest ? stack[si].closest('.entry') : null;
+          if (en) return en;
+        }
+      }
+    }
+    return null;
+  }
+
+  function saveLast() {
+    if (document.body.classList.contains('searching')) return;
+    if (reviewOpen) return;
+    var entry = entryAtTop();
+    var rec = { y: window.pageYOffset || document.documentElement.scrollTop || 0, t: Date.now() };
+    if (entry) {
+      var ew = entry.querySelector('.word');
+      rec.i = Array.prototype.indexOf.call(entries, entry);
+      rec.w = ew ? ew.textContent : '';
+    }
+    try { window.localStorage.setItem(LAST_KEY, JSON.stringify(rec)); } catch (e) {}
+  }
+
+  var saveLastTimer = null;
+  function scheduleSaveLast() {
+    if (saveLastTimer) clearTimeout(saveLastTimer);
+    saveLastTimer = setTimeout(function () { saveLastTimer = null; saveLast(); }, 250);
+  }
+  window.addEventListener('scroll', scheduleSaveLast, { passive: true });
+  window.addEventListener('pagehide', saveLast);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') saveLast();
+  });
+
+  function findSavedEntry(o) {
+    if (!o) return null;
+    if (typeof o.i === 'number' && o.i >= 0 && o.i < entries.length) {
+      var cand = entries[o.i];
+      var cw = cand.querySelector('.word');
+      if (!o.w || (cw && cw.textContent === o.w)) return cand;
+    }
+    if (o.w && wordEls[o.w] && wordEls[o.w].length) return wordEls[o.w][0];
+    return null;
+  }
+
+  resumeSaved = readLast();
+  if (resumeSaved && typeof resumeSaved.y === 'number' && resumeSaved.y > window.innerHeight) {
+    resumeLabel.textContent = resumeSaved.w ? '继续上次 · ' + resumeSaved.w : '继续上次';
+    resumeBtn.hidden = false;
+  } else {
+    resumeSaved = null;
+  }
+
+  resumeBtn.addEventListener('click', function () {
+    if (!resumeSaved) return;
+    resumeBtn.hidden = true;
+    var el = findSavedEntry(resumeSaved);
+    if (el) {
+      try { el.scrollIntoView({ block: 'start' }); } catch (e) { window.scrollTo(0, resumeSaved.y); }
+      window.scrollBy(0, -56);
+    } else {
+      window.scrollTo(0, resumeSaved.y);
+    }
+    resumeSaved = null;
   });
 
   sync();
