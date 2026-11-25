@@ -7088,7 +7088,8 @@ body.searching .resume { display: none !important; }
   var domainEls = document.querySelectorAll('.domain');
   var searchIndex = [];
   var openBefore = null;                  /* 搜索开始前的展开状态，null 表示未激活 */
-  var scrollBefore = null;                /* 搜索开始前的滚动位置 */
+  var scrollBefore = null;                /* 搜索开始前的滚动位置（兜底） */
+  var anchorBefore = null;                /* 搜索开始时视口顶部的那一条，用于按元素回位 */
 
   /* ===== 组内释义开关：只影响本组，语义与总开关一致 ===== */
   var groupToggles = [];
@@ -7260,10 +7261,20 @@ body.searching .resume { display: none !important; }
       for (var m = 0; m < entries.length; m++) entries[m].classList.toggle('open', openBefore[m]);
       openBefore = null;
     }
-    if (scrollBefore !== null) {         /* 回到搜索前的滚动位置，而不是文档开头 */
+    if (scrollBefore !== null || anchorBefore) {  /* 回到搜索前的位置，而不是文档开头 */
       var targetScroll = scrollBefore;
+      var anchor = anchorBefore;
       scrollBefore = null;
-      requestAnimationFrame(function () { window.scrollTo(0, targetScroll); });
+      anchorBefore = null;
+      requestAnimationFrame(function () { /* 等还原后的布局生效再回位 */
+        if (anchor && anchor.el && anchor.el.isConnected) {
+          /* 按元素回位：搜索期间 content-visibility 会记下被过滤后的区块高度，
+             清空后整页高度要连续几帧才稳定，光靠一次性 scrollTo 会被甩偏 */
+          settleAnchorScroll(anchor);
+        } else if (targetScroll !== null) {
+          window.scrollTo(0, targetScroll);
+        }
+      });
     }
     sync();
   }
@@ -7278,6 +7289,7 @@ body.searching .resume { display: none !important; }
       openBefore = new Array(entries.length);
       for (var b = 0; b < entries.length; b++) openBefore[b] = entries[b].classList.contains('open');
       scrollBefore = window.pageYOffset || document.documentElement.scrollTop || 0;
+      anchorBefore = captureAnchor();
     }
 
     for (var i = 0; i < groupEls.length; i++) groupEls[i].classList.add('no-hit');
@@ -7593,6 +7605,36 @@ body.searching .resume { display: none !important; }
       }
     }
     return null;
+  }
+
+  /* 搜索开始前记住视口顶部那一条的位置：清空时按元素回位，不依赖整页高度 */
+  function captureAnchor() {
+    var el = entryAtTop();
+    if (!el) return null;
+    return { el: el, top: el.getBoundingClientRect().top };
+  }
+
+  /* 回位后布局还要变几帧（content-visibility 的区块高度在重算），
+     期间关掉滚动锚定，逐帧把锚点校正回原来的视口位置，稳定后再恢复 */
+  function settleAnchorScroll(anchor) {
+    var root = document.documentElement;
+    var prevRoot = root.style.overflowAnchor;
+    var prevBody = document.body.style.overflowAnchor;
+    root.style.overflowAnchor = 'none';
+    document.body.style.overflowAnchor = 'none';
+    var frames = 0, stable = 0;
+    (function step() {
+      var d = anchor.el.getBoundingClientRect().top - anchor.top;
+      if (Math.abs(d) > 1) { window.scrollBy(0, d); stable = 0; }
+      else stable++;
+      frames++;
+      if (stable < 5 && frames < 90) {
+        requestAnimationFrame(step);
+      } else {
+        root.style.overflowAnchor = prevRoot;
+        document.body.style.overflowAnchor = prevBody;
+      }
+    })();
   }
 
   function saveLast() {
